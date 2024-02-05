@@ -34,6 +34,7 @@ class Pokemon:
         "_possible_abilities",
         "_preparing_move",
         "_preparing_target",
+        "_previous_move",
         "_protect_counter",
         "_shiny",
         "_revealed",
@@ -75,6 +76,7 @@ class Pokemon:
         self._max_hp: Optional[int] = 0
         self._moves: Dict[str, Move] = {}
         self._shiny: Optional[bool] = False
+        self._previous_move : Optional[Move] = None
 
         # Battle related attributes
 
@@ -238,6 +240,7 @@ class Pokemon:
         self._preparing_move = None
         self._preparing_target = None
         move = self._add_move(move_id, use=use)
+        self._previous_move = move
 
         if move and move.is_protect_counter and not failed:
             self._protect_counter += 1
@@ -272,6 +275,10 @@ class Pokemon:
 
         self._preparing_move = move
         self._preparing_target = target
+
+    @property
+    def previous_move(self) -> Optional[Move]:
+        return self._previous_move
 
     def primal(self):
         species_id_str = to_id_str(self._species)
