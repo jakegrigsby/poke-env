@@ -647,7 +647,20 @@ class AbstractBattle(ABC):
             source, target, stats = split_message[2:5]
             source = self.get_pokemon(source)
             target = self.get_pokemon(target)
-            for stat in stats.split(", "):
+            if '[from] move:' in stats:
+                # [from] move special cases
+                move_id = to_id_str(stats.replace('[from] move:', '').strip())
+                if move_id == "heartswap":
+                    # swap all stats
+                    stats = target.boosts.keys()
+                else:
+                    stats = []
+                    self.logger.warning("Untracked stat swap: "
+                                        f"-swapboost `{split_message[-1]}` "
+                                        "is not supported")
+            else:
+                stats = stats.split(", ")
+            for stat in stats:
                 source.boosts[stat], target.boosts[stat] = (
                     target.boosts[stat],
                     source.boosts[stat],
