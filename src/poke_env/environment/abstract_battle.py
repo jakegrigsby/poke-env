@@ -484,14 +484,17 @@ class AbstractBattle(ABC):
                     )
             else:
                 pokemon, move, presumed_target = split_message[2:5]
-                if self.logger is not None:
-                    self.logger.warning(
-                        "Unmanaged move message format received - cleaned up message %s in "
-                        "battle %s turn %d",
-                        split_message,
-                        self.battle_tag,
-                        self.turn,
-                    )
+                if len(split_message) == 6 and "[from]" in split_message[-1]:
+                    pass
+                else:
+                    if self.logger is not None:
+                        self.logger.warning(
+                            "Unmanaged move message format received - cleaned up message %s in "
+                            "battle %s turn %d",
+                            split_message,
+                            self.battle_tag,
+                            self.turn,
+                        )
 
             # Check if a silent-effect move has occurred (Minimize) and add the effect
 
