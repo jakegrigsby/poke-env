@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, Union
+import logging
 
 from poke_env.data import GenData, to_id_str
 from poke_env.environment.effect import Effect
@@ -507,7 +508,7 @@ class Pokemon:
                 if not {"copycat", "metronome", "mefirst", "mirrormove", "assist", "transform", "mimic"}.intersection(self.moves):
                     # TODO: I can't find the solution for this bug, but also can't find a case where it justifies throwing an error.
                     # seems to happen when a mirromove pokemon tries to copy a move from an opponent that has just switched out.
-                    print(f"Error with move {move} for species {self.species}. Expected self.moves to contain copycat, "
+                    logging.getLogger("poke-env").warning(f"Error with move {move} for species {self.species}. Expected self.moves to contain copycat, "
                     "metronome, mefirst, mirrormove, assist, transform or mimic. Got"
                     f" {self.moves}. This pokemon could be accessing an unlearnable move."
                 )
