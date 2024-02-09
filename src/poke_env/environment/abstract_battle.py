@@ -484,14 +484,17 @@ class AbstractBattle(ABC):
                     )
             else:
                 pokemon, move, presumed_target = split_message[2:5]
-                if self.logger is not None:
-                    self.logger.warning(
-                        "Unmanaged move message format received - cleaned up message %s in "
-                        "battle %s turn %d",
-                        split_message,
-                        self.battle_tag,
-                        self.turn,
-                    )
+                if len(split_message) == 6 and "[from]" in split_message[-1]:
+                    pass
+                else:
+                    if self.logger is not None:
+                        self.logger.warning(
+                            "Unmanaged move message format received - cleaned up message %s in "
+                            "battle %s turn %d",
+                            split_message,
+                            self.battle_tag,
+                            self.turn,
+                        )
 
             # Check if a silent-effect move has occurred (Minimize) and add the effect
 
@@ -647,7 +650,20 @@ class AbstractBattle(ABC):
             source, target, stats = split_message[2:5]
             source = self.get_pokemon(source)
             target = self.get_pokemon(target)
-            for stat in stats.split(", "):
+            if '[from] move:' in stats:
+                # [from] move special cases
+                move_id = to_id_str(stats.replace('[from] move:', '').strip())
+                if move_id == "heartswap":
+                    # swap all stats
+                    stats = target.boosts.keys()
+                else:
+                    stats = []
+                    self.logger.warning("Untracked stat swap: "
+                                        f"-swapboost `{split_message[-1]}` "
+                                        "is not supported")
+            else:
+                stats = stats.split(", ")
+            for stat in stats:
                 source.boosts[stat], target.boosts[stat] = (
                     target.boosts[stat],
                     source.boosts[stat],
