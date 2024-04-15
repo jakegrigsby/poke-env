@@ -66,7 +66,7 @@ class GenData:
         for name, value in dex.items():
             if self.gen < 3 and "abilities" in value:
                 # remove abilities from static files in gens 1-2
-                value["abilities"] = {}
+                value["abilities"] = {"0" : "No Ability"}
             if "baseSpecies" in value:
                 value["species"] = value["baseSpecies"]
             else:
