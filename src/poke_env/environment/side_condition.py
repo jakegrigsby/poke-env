@@ -42,13 +42,15 @@ class SideCondition(Enum):
         :return: The corresponding SideCondition object.
         :rtype: SideCondition
         """
-        message = message.replace("move: ", "")
-        message = message.replace(" ", "_")
-        message = message.replace("-", "_")
+        condition = message.replace("move: ", "").replace(" ", "_").replace("-", "_").upper()
 
         try:
-            return SideCondition[message.upper()]
+            return SideCondition[condition]
         except KeyError:
+            # try to catch messages w/o spacing
+            for known_condition in SideCondition:
+                if known_condition.name.replace("_", "") == condition:
+                    return known_condition
             logging.getLogger("poke-env").warning(
                 "Unexpected side condition '%s' received. SideCondition.UNKNOWN will be"
                 " used instead. If this is unexpected, please open an issue at "
