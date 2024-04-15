@@ -379,7 +379,6 @@ class AbstractBattle(ABC):
     def parse_message(self, split_message: List[str]):
         if self._save_replays:
             self._replay_data.append(split_message)
-
         if split_message[1] in self.MESSAGES_TO_IGNORE:
             return
         elif split_message[1] in ["drag", "switch"]:
@@ -555,8 +554,14 @@ class AbstractBattle(ABC):
                     self.opponent_can_dynamax = False
         elif split_message[1] == "-activate":
             target, effect = split_message[2:4]
-            if target:
-                self.get_pokemon(target).start_effect(effect)
+            if not target:
+                return
+            elif effect.startswith("ability: "):
+                ability = effect[9:]
+                self.get_pokemon(target).ability = ability
+                # avoid adding the ability messages that show up here as 'effects'
+                return
+            self.get_pokemon(target).start_effect(effect)
         elif split_message[1] == "-status":
             pokemon, status = split_message[2:4]
             self.get_pokemon(pokemon).status = status
@@ -656,6 +661,8 @@ class AbstractBattle(ABC):
                 if move_id == "heartswap":
                     # swap all stats
                     stats = target.boosts.keys()
+                elif move_id == "guardswap":
+                    stats = ["def", "spd"]
                 else:
                     stats = []
                     self.logger.warning("Untracked stat swap: "
