@@ -235,6 +235,8 @@ class Effect(Enum):
 
         if message == "FALLENUNDEFINED":
             message = "FALLEN"
+        if message == "LIGHTSCREEN":
+            message = "LIGHT_SCREEN"
 
         try:
             return Effect[message]
