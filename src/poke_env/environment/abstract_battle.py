@@ -792,7 +792,7 @@ class AbstractBattle(ABC):
         else:
             conditions = self.opponent_side_conditions
         condition = SideCondition.from_showdown_message(condition_str)
-        if condition is not SideCondition.UNKNOWN:
+        if condition is not SideCondition.UNKNOWN and condition in conditions:
             conditions.pop(condition)
 
     def _side_start(self, side: str, condition_str: str):
