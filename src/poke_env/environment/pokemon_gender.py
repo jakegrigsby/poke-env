@@ -5,6 +5,9 @@ from __future__ import annotations
 
 from enum import Enum, auto, unique
 
+from poke_env.exceptions import ShowdownException
+
+
 @unique
 class PokemonGender(Enum):
     """Enumeration, represent a pokemon's gender."""
@@ -30,4 +33,4 @@ class PokemonGender(Enum):
             return PokemonGender.MALE
         elif gender == "F":
             return PokemonGender.FEMALE
-        raise Exception("Unmanaged request gender: '%s'", gender)
+        raise ShowdownException("Unmanaged request gender: '%s'", gender)

@@ -1,10 +1,10 @@
 from logging import Logger
 from typing import Any, Dict, List, Optional, Union
 
-from src.environment.abstract_battle import AbstractBattle
-from src.environment.move import Move
-from src.environment.pokemon import Pokemon
-from src.environment.pokemon_type import PokemonType
+from poke_env.environment.abstract_battle import AbstractBattle
+from poke_env.environment.move import Move
+from poke_env.environment.pokemon import Pokemon
+from poke_env.environment.pokemon_type import PokemonType
 
 
 class Battle(AbstractBattle):
@@ -20,7 +20,6 @@ class Battle(AbstractBattle):
 
         # Turn choice attributes
         self._available_moves: List[Move] = []
-        self._available_switches: List[Pokemon] = []
         self._can_dynamax: bool = False
         self._can_mega_evolve: bool = False
         self._can_tera: Optional[PokemonType] = None
@@ -36,6 +35,10 @@ class Battle(AbstractBattle):
         self.battle_msg_history = ""
         self.pokemon_hp_log_dict = {}
         self.speed_list = []
+
+        self._dynamax_intent: bool = False
+        self._tera_intent: bool = False
+
 
     def clear_all_boosts(self):
         if self.active_pokemon is not None:
@@ -65,6 +68,7 @@ class Battle(AbstractBattle):
         :param request: Parsed JSON request object.
         :type request: dict
         """
+        # print('[battle request]', request)
         if "wait" in request and request["wait"]:
             self._wait = True
         else:
@@ -128,6 +132,8 @@ class Battle(AbstractBattle):
         if not self.trapped and not self.reviving:
             for pokemon in side["pokemon"]:
                 if pokemon:
+                    # print("battle", pokemon)
+                    # print('[team]', self._team)
                     pokemon = self._team[pokemon["ident"]]
                     if not pokemon.active and not pokemon.fainted:
                         self._available_switches.append(pokemon)
@@ -141,15 +147,15 @@ class Battle(AbstractBattle):
 
     def switch(self, pokemon_str: str, details: str, hp_status: str):
         identifier = pokemon_str.split(":")[0][:2]
-
         if identifier == self._player_role:
             if self.active_pokemon:
                 self.active_pokemon.switch_out()
+            pokemon = self.get_pokemon(pokemon_str, details=details, force_self_team=True)
         else:
             if self.opponent_active_pokemon:
                 self.opponent_active_pokemon.switch_out()
 
-        pokemon = self.get_pokemon(pokemon_str, details=details)
+            pokemon = self.get_pokemon(pokemon_str, details=details, force_opp_team=True)
 
         pokemon.switch_in(details=details)
         pokemon.set_hp_status(hp_status)

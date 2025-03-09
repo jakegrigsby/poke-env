@@ -2,39 +2,40 @@
 """
 
 import asyncio
+from difflib import get_close_matches
 import random
 from abc import ABC, abstractmethod
 from asyncio import Condition, Event, Queue, Semaphore
 from logging import Logger
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any, Awaitable, Dict, List, Optional, Union
 
 import orjson
 
-from src.concurrency import create_in_poke_loop, handle_threaded_coroutines
-from src.data import GenData, to_id_str
-from src.environment.abstract_battle import AbstractBattle
-from src.environment.battle import Battle
-from src.environment.double_battle import DoubleBattle
-from src.environment.move import Move
-from src.environment.pokemon import Pokemon
-from src.exceptions import ShowdownException
-from src.player.battle_order import (
+from poke_env.concurrency import create_in_poke_loop, handle_threaded_coroutines
+from poke_env.data import GenData, to_id_str
+from poke_env.environment.abstract_battle import AbstractBattle
+from poke_env.environment.battle import Battle
+from poke_env.environment.double_battle import DoubleBattle
+from poke_env.environment.move import Move
+from poke_env.environment.pokemon import Pokemon
+from poke_env.exceptions import ShowdownException
+from poke_env.player.battle_order import (
     BattleOrder,
     DefaultBattleOrder,
     DoubleBattleOrder,
 )
-from src.client import Client
-from src.client.account_configuration import (
+from poke_env.ps_client import PSClient
+from poke_env.ps_client.account_configuration import (
     CONFIGURATION_FROM_PLAYER_COUNTER,
     AccountConfiguration,
 )
-from src.client.server_configuration import (
+from poke_env.ps_client.server_configuration import (
     LocalhostServerConfiguration,
     ServerConfiguration,
 )
-from src.teambuilder.constant_teambuilder import ConstantTeambuilder
-from src.teambuilder.teambuilder import Teambuilder
+from poke_env.teambuilder.constant_teambuilder import ConstantTeambuilder
+from poke_env.teambuilder.teambuilder import Teambuilder
 
 class Player(ABC):
     """
@@ -110,7 +111,7 @@ class Player(ABC):
         if server_configuration is None:
             server_configuration = LocalhostServerConfiguration
 
-        self.ps_client = Client(
+        self.ps_client = PSClient(
             account_configuration=account_configuration,
             avatar=avatar,
             log_level=log_level,
@@ -153,13 +154,32 @@ class Player(ABC):
         self.move_set = set()
         self.item_set = set()
         self.ability_set = set()
-        self.pokemon_set = set()
         self._reward_buffer: Dict[AbstractBattle, float] = {}
         self.pokemon_move_dict = {}
         self.pokemon_item_dict = {}
         self.pokemon_ability_dict = {}
         self.logger.debug("Player initialisation finished")
-
+    
+    def check_all_moves(self, move_str: str, species: str) -> Move:
+        if self.gen.gen == 8:
+            valid_move = None
+            if move_str in self.pokemon_move_dict:
+                valid_move = move_str
+            else:
+                closest = get_close_matches(move_str, [move[0] for move in self.pokemon_move_dict[species].values()], n=1, cutoff=0.8)
+                if len(closest) > 0:
+                    valid_move = closest[0]
+        else:
+            valid_move = move_str
+        # print(f'{species} input: {move_str} vs output: {valid_move}', flush=True)
+        # print(f'all {[move[0] for move in self.pokemon_move_dict[species].values()]}')
+        if valid_move is None:
+            return None
+        id_ = Move.retrieve_id(valid_move)
+        move = Move(move_id=id_, raw_id=valid_move, gen=self.gen.gen)
+        # move = Move(valid_move, self.genNum)
+        return move
+    
     def reward_computing_helper(
         self,
         battle: AbstractBattle,
@@ -207,11 +227,11 @@ class Player(ABC):
     def _create_account_configuration(self) -> AccountConfiguration:
         key = type(self).__name__
         CONFIGURATION_FROM_PLAYER_COUNTER.update([key])
-        username = "%s %d" % (key, CONFIGURATION_FROM_PLAYER_COUNTER[key])
+        username = "%s %d" % (key, CONFIGURATION_FROM_PLAYER_COUNTER[key]+5)
         if len(username) > 18:
             username = "%s %d" % (
                 key[: 18 - len(username)],
-                CONFIGURATION_FROM_PLAYER_COUNTER[key],
+                CONFIGURATION_FROM_PLAYER_COUNTER[key]+5,
             )
         return AccountConfiguration(username, None)
 
@@ -228,6 +248,18 @@ class Player(ABC):
             self._team = team
         else:
             self._team = ConstantTeambuilder(team)
+        
+
+        # TODO: set tera types for pokemon
+
+        # set mon teras
+        # tera dict for each mon species
+        # self.tera_dict = {}
+        # for all mons:
+        #     self.tera_dict[mon.sepcies] = mon.tera_type
+        
+        # return
+        
 
     async def _create_battle(self, split_message: List[str]) -> AbstractBattle:
         """Returns battle object corresponding to received message.
@@ -321,7 +353,7 @@ class Player(ABC):
 
                 elif msg[idx][1] == "turn":
                     if len(battle.speed_list) == 2:
-                        description = f" {battle.speed_list[0]} outspeeded {battle.speed_list[1]}."
+                        description = f" {battle.speed_list[0]} outspeeded {battle.speed_list[1]} in this turn."
                     description += "[sep]Turn " + msg[idx][2] + ":"
                     battle.speed_list = []
 
@@ -345,7 +377,7 @@ class Player(ABC):
                     description = " " + msg[idx][2] + "was dragged out."
 
                 elif msg[idx][1] == "faint":
-                    description = " " + msg[idx][2] + " fainted."
+                    description = " " + msg[idx][2] + " faint."
 
                 elif msg[idx][1] == "move":
                     description = " " + msg[idx][2] + " used "+ msg[idx][3] + "."
@@ -379,7 +411,7 @@ class Player(ABC):
                         target = "your"
                     else:
                         target = "opponent"
-                    description = " " + msg[idx][3] + "was removed from " + target + " team."
+                    description = " " + msg[idx][3] + "was removed from " + target + " team"
 
                 elif msg[idx][1] == "-start":
                     description = " " + msg[idx][2] + " started " + msg[idx][3] + "."
@@ -388,23 +420,22 @@ class Player(ABC):
                             description = " " + msg[idx][2] + " started " + msg[idx][3] + " due to " + msg[idx][4] + "."
 
                 elif msg[idx][1] == "-end":
-                    description = " " + msg[idx][2] + " stopped " + msg[idx][3] + "."
+                    description = " " + msg[idx][2] + " stop " + msg[idx][3] + "."
 
-                # remove field and put it into the state
-                # elif msg[idx][1] == "-fieldstart":
-                #     description = " Field start: " + msg[idx][2] + " ran across the battlefield."
-                #
-                # elif msg[idx][1] == "-fieldend":
-                #     description = " Field end: " + msg[idx][2] + " disappeared from the battlefield."
+                elif msg[idx][1] == "-fieldstart":
+                    description = " Field start: " + msg[idx][2] + " ran across the battlefield."
+
+                elif msg[idx][1] == "-fieldend":
+                    description = " Field end: " + msg[idx][2] + " disappeared from the battlefield."
 
                 elif msg[idx][1] == "-ability":
                     description = " " + msg[idx][2] + "'s ability: " + msg[idx][3] + "."
 
                 elif msg[idx][1] == "-supereffective":
-                    description = " It was super effective to " + msg[idx][2] + "."
+                    description = " The move was super effective to " + msg[idx][2] + "."
 
                 elif msg[idx][1] == "-resisted":
-                    description = " It was ineffective to " + msg[idx][2] + "."
+                    description = " The move was ineffective to " + msg[idx][2] + "."
 
                 elif msg[idx][1] == "-heal":
                     try:
@@ -426,10 +457,7 @@ class Player(ABC):
                     delta_hp_fraction = current_hp_fraction - previous_hp_fraction
 
                     if len(msg[idx]) > 4:
-                        if "item" in msg[idx][4]:
-                            pass
-                        else:
-                            description = f" {msg[idx][2]} restored {delta_hp_fraction}% of HP ({current_hp_fraction}% left) {msg[idx][4]}."
+                        description = f" {msg[idx][2]} restored {delta_hp_fraction}% of HP ({current_hp_fraction}% left) {msg[idx][4]}."
                     else:
                         description = f" {msg[idx][2]} restored {delta_hp_fraction}% of HP ({current_hp_fraction}% left)."
                     try:
@@ -637,6 +665,9 @@ class Player(ABC):
             message = self.choose_move(battle)
             if isinstance(message, Awaitable):
                 message = await message
+            if isinstance(message, str):
+                print(message)
+            # print( message)
             message = message.message
 
         await self.ps_client.send_message(message, battle.battle_tag)
@@ -692,7 +723,7 @@ class Player(ABC):
             packed_team = self.next_team
 
         import logging
-        logging.warning("AAAHHH in accept_challenges")
+        # logging.warning("AAAHHH in accept_challenges")
         await handle_threaded_coroutines(
             self._accept_challenges(opponent, n_challenges, packed_team)
         )
@@ -704,7 +735,7 @@ class Player(ABC):
         packed_team: Optional[str],
     ):
         import logging
-        logging.warning("AAAHHH in _accept_challenges")
+        # logging.warning("AAAHHH in _accept_challenges")
         if opponent:
             if isinstance(opponent, list):
                 opponent = [to_id_str(o) for o in opponent]
@@ -902,7 +933,9 @@ class Player(ABC):
         await handle_threaded_coroutines(self._ladder(n_games))
 
     async def _ladder(self, n_games: int):
+        print('waiting for log in')
         await self.ps_client.logged_in.wait()
+        print('logged in')
         start_time = perf_counter()
 
         for _ in range(n_games):
@@ -919,6 +952,76 @@ class Player(ABC):
             n_games,
             perf_counter() - start_time,
         )
+        
+    async def ladder_accept(
+        self,
+        opponent: Optional[Union[str, List[str]]],
+        n_challenges: int,
+        packed_team: Optional[str] = None,
+    ):
+        """Let the player wait for challenges from opponent, and accept them. Online on the ladder.
+
+        If opponent is None, every challenge will be accepted. If opponent if a string,
+        all challenges from player with that name will be accepted. If opponent is a
+        list all challenges originating from players whose name is in the list will be
+        accepted.
+
+        Up to n_challenges challenges will be accepted, after what the function will
+        wait for these battles to finish, and then return.
+
+        :param opponent: Players from which challenges will be accepted.
+        :type opponent: None, str or list of str
+        :param n_challenges: Number of challenges that will be accepted
+        :type n_challenges: int
+        :packed_team: Team to use. Defaults to generating a team with the agent's teambuilder.
+        :type packed_team: string, optional.
+        """
+        if packed_team is None:
+            packed_team = self.next_team
+
+        import logging
+        # logging.warning("AAAHHH in accept_challenges")
+        await handle_threaded_coroutines(
+            self._ladder_accept(opponent, n_challenges, packed_team)
+        )
+
+    async def _ladder_accept(
+        self,
+        opponent: Optional[Union[str, List[str]]],
+        n_challenges: int,
+        packed_team: Optional[str],
+    ):
+        import logging
+        # logging.warning("AAAHHH in _accept_challenges")
+        if opponent:
+            if isinstance(opponent, list):
+                opponent = [to_id_str(o) for o in opponent]
+            else:
+                opponent = to_id_str(opponent)
+        await self.ps_client.logged_in.wait()
+        self.logger.debug("Event logged in received in accept_challenge")
+
+        for _ in range(n_challenges):
+            async with self._battle_start_condition:
+                while True:
+                    username = to_id_str(await self._challenge_queue.get())
+                    self.logger.debug(
+                        "Consumed %s from challenge queue in accept_challenge", username
+                    )
+                    if (
+                        (opponent is None)
+                        or (opponent == username)
+                        or (isinstance(opponent, list) and (username in opponent))
+                    ):
+                        print(packed_team)
+                        await self.ps_client.accept_challenge(username, packed_team)
+                        await self._battle_start_condition.wait()
+                        while self._battle_count_queue.full():
+                            async with self._battle_end_condition:
+                                await self._battle_end_condition.wait()
+                        await self._battle_semaphore.acquire()
+                        break
+        await self._battle_count_queue.join()
 
     async def battle_against(self, opponent: "Player", n_battles: int = 1):
         """Make the player play n_battles against opponent.
@@ -1053,6 +1156,9 @@ class Player(ABC):
         :return: Formatted move order
         :rtype: str
         """
+        
+        # input(order)
+        
         return BattleOrder(
             order,
             mega=mega,

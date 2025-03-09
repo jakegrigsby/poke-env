@@ -2,12 +2,12 @@ import copy
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from src.data import GenData, to_id_str
-from src.environment.field import Field
-from src.environment.move_category import MoveCategory
-from src.environment.pokemon_type import PokemonType
-from src.environment.status import Status
-from src.environment.weather import Weather
+from poke_env.data import GenData, to_id_str
+from poke_env.environment.field import Field
+from poke_env.environment.move_category import MoveCategory
+from poke_env.environment.pokemon_type import PokemonType
+from poke_env.environment.status import Status
+from poke_env.environment.weather import Weather
 
 SPECIAL_MOVES: Set[str] = {"struggle", "recharge"}
 
@@ -192,8 +192,7 @@ class Move:
         """
         if "category" not in self.entry:
             print(self, self.entry)
-
-        if self._gen <= 3 and self.entry["category"].upper() in {
+        if int(self._gen) <= 3 and self.entry["category"].upper() in {
             "PHYSICAL",
             "SPECIAL",
         }:

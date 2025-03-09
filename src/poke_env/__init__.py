@@ -1,21 +1,21 @@
 """poke_env module init.
 """
 import logging
-import src.environment as environment
-import src.exceptions as exceptions
-import src.player as player
-import src.client as ps_client
-import src.stats as stats
-import src.teambuilder as teambuilder
-from src.data import gen_data, to_id_str
-from src.exceptions import ShowdownException
-from src.client import AccountConfiguration
-from src.client.server_configuration import (
+import poke_env.environment as environment
+import poke_env.exceptions as exceptions
+import poke_env.player as player
+import poke_env.ps_client as ps_client
+import poke_env.stats as stats
+import poke_env.teambuilder as teambuilder
+from poke_env.data import gen_data, to_id_str
+from poke_env.exceptions import ShowdownException
+from poke_env.ps_client import AccountConfiguration
+from poke_env.ps_client.server_configuration import (
     LocalhostServerConfiguration,
     ServerConfiguration,
     ShowdownServerConfiguration,
 )
-from src.stats import compute_raw_stats
+from poke_env.stats import compute_raw_stats
 
 __logger = logging.getLogger("poke-env")
 __stream_handler = logging.StreamHandler()

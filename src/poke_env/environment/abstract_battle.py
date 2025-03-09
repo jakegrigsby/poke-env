@@ -3,13 +3,17 @@ from abc import ABC, abstractmethod
 from logging import Logger
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from src.data import GenData, to_id_str
-from src.data.replay_template import REPLAY_TEMPLATE
-from src.environment.field import Field
-from src.environment.pokemon import Pokemon
-from src.environment.side_condition import STACKABLE_CONDITIONS, SideCondition
-from src.environment.weather import Weather
+from poke_env.data import GenData, to_id_str
+from poke_env.data.replay_template import REPLAY_TEMPLATE
+from poke_env.environment.field import Field
+from poke_env.environment.pokemon import Pokemon
+from poke_env.environment.side_condition import STACKABLE_CONDITIONS, SideCondition
+from poke_env.environment.weather import Weather
 
+from difflib import get_close_matches
+
+def sanitize_string(s: str) -> str:
+    return ''.join(char for char in s if char.isalnum()).lower()
 
 class AbstractBattle(ABC):
     MESSAGES_TO_IGNORE = {
@@ -44,6 +48,7 @@ class AbstractBattle(ABC):
         "html",
         "init",
         "immune",
+        "inactiveoff",
         "join",
         "j",
         "J",
@@ -142,6 +147,7 @@ class AbstractBattle(ABC):
         self.logger: Optional[Logger] = logger
 
         # Turn choice attributes
+        self._available_switches: List[Pokemon] = []
         self.in_team_preview: bool = False
         self._move_on_next_request: bool = False
         self._wait: Optional[bool] = None
@@ -169,12 +175,15 @@ class AbstractBattle(ABC):
         self._team: Dict[str, Pokemon] = {}
         self._opponent_team: Dict[str, Pokemon] = {}
 
+
+
     def get_pokemon(
         self,
         identifier: str,
         force_self_team: bool = False,
         details: str = "",
         request: Optional[Dict[str, Any]] = None,
+        force_opp_team: bool = False,
     ) -> Pokemon:
         """Returns the Pokemon object corresponding to given identifier. Can force to
         return object from the player's team if force_self_team is True. If the Pokemon
@@ -193,15 +202,55 @@ class AbstractBattle(ABC):
         :raises ValueError: If the team has too many pokemons, as determined by the
             teamsize component of battle initialisation.
         """
+        # this is a monster but it works for the random pokemon name changes
+        player_role = identifier[:2]
+        cutoff = 1
         if identifier[3] != " ":
             identifier = identifier[:2] + identifier[3:]
+        dash_mons = {'ho-oh', 'chi-yu', 'porygon-z', 'ting-lu', 'kommo-o'}
+        if '-' in identifier and len(dash_mons.intersection({identifier[4:].lower()})) == 0:
+            identifier = identifier.split('-')[0]
+        if not force_self_team and not force_opp_team:
+            if identifier in self._team.keys():
+                return self._team[identifier]
+            elif identifier in self._opponent_team.keys():
+                return self._opponent_team[identifier]
+            else:
+                for mon in self._team.keys():
+                    if sanitize_string(identifier) in sanitize_string(mon) or sanitize_string(mon) in sanitize_string(identifier):
+                        return self._team[mon]
+                for mon in self._opponent_team.keys():
+                    if sanitize_string(identifier) in sanitize_string(mon) or sanitize_string(mon) in sanitize_string(identifier):
+                        return self._opponent_team[mon]
+            closest = get_close_matches(identifier, list(self._team.keys()), n=1, cutoff=cutoff)
+            if len(closest) > 0:
+                identifier = closest[0]
+                return self._team[identifier]
+            closest = get_close_matches(identifier, list(self._opponent_team.keys()), n=1, cutoff=cutoff)
+            if len(closest) > 0:
+                identifier = closest[0]
+                return self._opponent_team[identifier]
+        elif force_self_team:
+            if identifier in self._team:
+                return self._team[identifier]
+            for mon in self._team.keys():
+                if sanitize_string(identifier) in sanitize_string(mon) or sanitize_string(mon) in sanitize_string(identifier):
+                    return self._team[mon]
+            closest = get_close_matches(identifier, list(self._team.keys()), n=1, cutoff=cutoff)
+            if len(closest) > 0:
+                identifier = closest[0]
+                return self._team[identifier]
+        elif force_opp_team:
+            if identifier in self._opponent_team:
+                return self._opponent_team[identifier]
+            for mon in self._opponent_team.keys():
+                if sanitize_string(identifier) in sanitize_string(mon) or sanitize_string(mon) in sanitize_string(identifier):
+                    return self._opponent_team[mon]
+            closest = get_close_matches(identifier, list(self._opponent_team.keys()), n=1, cutoff=cutoff)
+            if len(closest) > 0:
+                identifier = closest[0]
+                return self._opponent_team[identifier]
 
-        if identifier in self._team:
-            return self._team[identifier]
-        elif identifier in self._opponent_team:
-            return self._opponent_team[identifier]
-
-        player_role = identifier[:2]
         is_mine = player_role == self._player_role
 
         if is_mine or force_self_team:
@@ -227,7 +276,6 @@ class AbstractBattle(ABC):
         else:
             species = identifier[4:]
             team[identifier] = Pokemon(species=species, gen=self._data.gen)
-
         return team[identifier]
 
     @abstractmethod
@@ -377,12 +425,13 @@ class AbstractBattle(ABC):
         self._finished = True
 
     def parse_message(self, split_message: List[str]):
+        # print("[PARSE MSG ABS BATTLE]", split_message)
         if self._save_replays:
             self._replay_data.append(split_message)
 
         if split_message[1] in self.MESSAGES_TO_IGNORE:
             return
-        elif split_message[1] in ["drag", "switch"]:
+        elif split_message[1] in ["drag", "switch"] and not "volt" in split_message[1] and not "voltswitch" in split_message:
             pokemon, details, hp_status = split_message[2:5]
             self.switch(pokemon, details, hp_status)
         elif split_message[1] == "-damage":
@@ -698,6 +747,10 @@ class AbstractBattle(ABC):
         elif split_message[1] == "poke":
             player, details = split_message[2:4]
             self._register_teampreview_pokemon(player, details)
+        elif split_message[1] == "premove":
+            pokemon, details = split_message[2:4]
+            mon = self.get_pokemon(pokemon, force_self_team=True)
+            mon._add_move(details)
         elif split_message[1] == "raw":
             username, rating_info = split_message[2].split("'s rating: ")
             rating = int(rating_info[:4])
@@ -762,6 +815,12 @@ class AbstractBattle(ABC):
         if player != self._player_role:
             mon = Pokemon(details=details, gen=self._data.gen)
             self._teampreview_opponent_team.add(mon)
+        else:
+            pokemon = player + 'a: ' + details.split(',')[0]
+            mon = self.get_pokemon(pokemon, details=details, force_self_team=True)
+            mon.set_hp_status('100/100')
+            mon._update_from_details(details)
+            self._available_switches.append(mon)
 
     def side_end(self, side: str, condition_str: str):
         if side[:2] == self._player_role:
@@ -819,7 +878,7 @@ class AbstractBattle(ABC):
 
     @property
     @abstractmethod
-    def active_pokemon(self) -> Any:
+    def active_pokemon(self) -> Pokemon:
         pass
 
     @property
@@ -1165,7 +1224,7 @@ class AbstractBattle(ABC):
     @property
     def move_on_next_request(self) -> bool:
         """
-        :return: Wheter the next received request should yield a move order directly.
+        :return: Whether the next received request should yield a move order directly.
             This can happen when a switch is forced, or an error is encountered.
         :rtype: bool
         """

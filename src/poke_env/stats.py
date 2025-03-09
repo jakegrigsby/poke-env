@@ -4,7 +4,7 @@
 import math
 from typing import List
 
-from src.data import GenData
+from poke_env.data import GenData
 
 STATS_TO_IDX = {
     "hp": 0,

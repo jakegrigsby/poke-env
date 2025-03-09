@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Union
 
 import orjson
 
-from src.data.normalize import to_id_str
+from poke_env.data.normalize import to_id_str
 
 
 class GenData:

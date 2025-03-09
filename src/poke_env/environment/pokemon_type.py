@@ -32,6 +32,7 @@ class PokemonType(Enum):
     PSYCHIC = auto()
     ROCK = auto()
     STEEL = auto()
+    STELLAR = auto()
     WATER = auto()
     THREE_QUESTION_MARKS = auto()
 
@@ -59,6 +60,9 @@ class PokemonType(Enum):
         if (
             self == PokemonType.THREE_QUESTION_MARKS
             or type_1 == PokemonType.THREE_QUESTION_MARKS
+            or type_1 == 'STELLAR'
+            or type_2 == 'STELLAR'
+            or self.name == 'STELLAR'
         ):
             return 1
 

@@ -3231,6 +3231,10 @@
         "name": "Rufflet Feather",
         "effect": "Material obtained after defeating/catching Rufflet, used in TM crafting."
     },
+    "rustedshield": {
+        "name": "Rusted Shield",
+        "effect": "When a Zamazenta is holding this item in battle, it transforms into its Crowned Shield form. In-battle, it also changes Zamazenta's Iron Head into Behemoth Bash."
+    },
     "sablenite": {
         "name": "Sablenite",
         "effect": "Enables Sableye to Mega Evolve during battle."
