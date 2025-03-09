@@ -3,12 +3,12 @@ from abc import ABC, abstractmethod
 from logging import Logger
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from poke_env.data import GenData, to_id_str
-from poke_env.data.replay_template import REPLAY_TEMPLATE
-from poke_env.environment.field import Field
-from poke_env.environment.pokemon import Pokemon
-from poke_env.environment.side_condition import STACKABLE_CONDITIONS, SideCondition
-from poke_env.environment.weather import Weather
+from src.data import GenData, to_id_str
+from src.data.replay_template import REPLAY_TEMPLATE
+from src.environment.field import Field
+from src.environment.pokemon import Pokemon
+from src.environment.side_condition import STACKABLE_CONDITIONS, SideCondition
+from src.environment.weather import Weather
 
 
 class AbstractBattle(ABC):
@@ -379,6 +379,7 @@ class AbstractBattle(ABC):
     def parse_message(self, split_message: List[str]):
         if self._save_replays:
             self._replay_data.append(split_message)
+
         if split_message[1] in self.MESSAGES_TO_IGNORE:
             return
         elif split_message[1] in ["drag", "switch"]:
@@ -483,17 +484,14 @@ class AbstractBattle(ABC):
                     )
             else:
                 pokemon, move, presumed_target = split_message[2:5]
-                if len(split_message) == 6 and "[from]" in split_message[-1]:
-                    pass
-                else:
-                    if self.logger is not None:
-                        self.logger.warning(
-                            "Unmanaged move message format received - cleaned up message %s in "
-                            "battle %s turn %d",
-                            split_message,
-                            self.battle_tag,
-                            self.turn,
-                        )
+                if self.logger is not None:
+                    self.logger.warning(
+                        "Unmanaged move message format received - cleaned up message %s in "
+                        "battle %s turn %d",
+                        split_message,
+                        self.battle_tag,
+                        self.turn,
+                    )
 
             # Check if a silent-effect move has occurred (Minimize) and add the effect
 
@@ -554,14 +552,8 @@ class AbstractBattle(ABC):
                     self.opponent_can_dynamax = False
         elif split_message[1] == "-activate":
             target, effect = split_message[2:4]
-            if not target:
-                return
-            elif effect.startswith("ability: "):
-                ability = effect[9:]
-                self.get_pokemon(target).ability = ability
-                # avoid adding the ability messages that show up here as 'effects'
-                return
-            self.get_pokemon(target).start_effect(effect)
+            if target:
+                self.get_pokemon(target).start_effect(effect)
         elif split_message[1] == "-status":
             pokemon, status = split_message[2:4]
             self.get_pokemon(pokemon).status = status
@@ -655,22 +647,7 @@ class AbstractBattle(ABC):
             source, target, stats = split_message[2:5]
             source = self.get_pokemon(source)
             target = self.get_pokemon(target)
-            if '[from] move:' in stats:
-                # [from] move special cases
-                move_id = to_id_str(stats.replace('[from] move:', '').strip())
-                if move_id == "heartswap":
-                    # swap all stats
-                    stats = target.boosts.keys()
-                elif move_id == "guardswap":
-                    stats = ["def", "spd"]
-                else:
-                    stats = []
-                    self.logger.warning("Untracked stat swap: "
-                                        f"-swapboost `{split_message[-1]}` "
-                                        "is not supported")
-            else:
-                stats = stats.split(", ")
-            for stat in stats:
+            for stat in stats.split(", "):
                 source.boosts[stat], target.boosts[stat] = (
                     target.boosts[stat],
                     source.boosts[stat],
@@ -792,7 +769,7 @@ class AbstractBattle(ABC):
         else:
             conditions = self.opponent_side_conditions
         condition = SideCondition.from_showdown_message(condition_str)
-        if condition is not SideCondition.UNKNOWN and condition in conditions:
+        if condition is not SideCondition.UNKNOWN:
             conditions.pop(condition)
 
     def _side_start(self, side: str, condition_str: str):

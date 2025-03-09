@@ -1,9 +1,9 @@
 """poke_env.teambuilder module init.
 """
-from poke_env.teambuilder import constant_teambuilder, teambuilder
-from poke_env.teambuilder.constant_teambuilder import ConstantTeambuilder
-from poke_env.teambuilder.teambuilder import Teambuilder
-from poke_env.teambuilder.teambuilder_pokemon import TeambuilderPokemon
+from src.teambuilder import constant_teambuilder, teambuilder
+from src.teambuilder.constant_teambuilder import ConstantTeambuilder
+from src.teambuilder.teambuilder import Teambuilder
+from src.teambuilder.teambuilder_pokemon import TeambuilderPokemon
 
 __all__ = [
     "ConstantTeambuilder",

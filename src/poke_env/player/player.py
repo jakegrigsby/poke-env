@@ -11,31 +11,30 @@ from typing import Any, Awaitable, Dict, List, Optional, Union
 
 import orjson
 
-from poke_env.concurrency import create_in_poke_loop, handle_threaded_coroutines
-from poke_env.data import GenData, to_id_str
-from poke_env.environment.abstract_battle import AbstractBattle
-from poke_env.environment.battle import Battle
-from poke_env.environment.double_battle import DoubleBattle
-from poke_env.environment.move import Move
-from poke_env.environment.pokemon import Pokemon
-from poke_env.exceptions import ShowdownException
-from poke_env.player.battle_order import (
+from src.concurrency import create_in_poke_loop, handle_threaded_coroutines
+from src.data import GenData, to_id_str
+from src.environment.abstract_battle import AbstractBattle
+from src.environment.battle import Battle
+from src.environment.double_battle import DoubleBattle
+from src.environment.move import Move
+from src.environment.pokemon import Pokemon
+from src.exceptions import ShowdownException
+from src.player.battle_order import (
     BattleOrder,
     DefaultBattleOrder,
     DoubleBattleOrder,
 )
-from poke_env.ps_client import PSClient
-from poke_env.ps_client.account_configuration import (
+from src.client import Client
+from src.client.account_configuration import (
     CONFIGURATION_FROM_PLAYER_COUNTER,
     AccountConfiguration,
 )
-from poke_env.ps_client.server_configuration import (
+from src.client.server_configuration import (
     LocalhostServerConfiguration,
     ServerConfiguration,
 )
-from poke_env.teambuilder.constant_teambuilder import ConstantTeambuilder
-from poke_env.teambuilder.teambuilder import Teambuilder
-
+from src.teambuilder.constant_teambuilder import ConstantTeambuilder
+from src.teambuilder.teambuilder import Teambuilder
 
 class Player(ABC):
     """
@@ -111,7 +110,7 @@ class Player(ABC):
         if server_configuration is None:
             server_configuration = LocalhostServerConfiguration
 
-        self.ps_client = PSClient(
+        self.ps_client = Client(
             account_configuration=account_configuration,
             avatar=avatar,
             log_level=log_level,
@@ -139,6 +138,8 @@ class Player(ABC):
         )
         self._battle_end_condition: Condition = create_in_poke_loop(Condition)
         self._challenge_queue: Queue[Any] = create_in_poke_loop(Queue)
+        self._dynamax_disable=False
+        self._boost_disable=False
 
         if isinstance(team, Teambuilder):
             self._team = team
@@ -147,7 +148,61 @@ class Player(ABC):
         else:
             self._team = None
 
+        self.test_set = set()
+        self.switch_set = set()
+        self.move_set = set()
+        self.item_set = set()
+        self.ability_set = set()
+        self.pokemon_set = set()
+        self._reward_buffer: Dict[AbstractBattle, float] = {}
+        self.pokemon_move_dict = {}
+        self.pokemon_item_dict = {}
+        self.pokemon_ability_dict = {}
         self.logger.debug("Player initialisation finished")
+
+    def reward_computing_helper(
+        self,
+        battle: AbstractBattle,
+        *,
+        fainted_value: float = 0.0,
+        hp_value: float = 0.0,
+        number_of_pokemons: int = 6,
+        starting_value: float = 0.0,
+        status_value: float = 0.0,
+        victory_value: float = 1.0,
+    ) -> float:
+
+        if battle not in self._reward_buffer:
+            self._reward_buffer[battle] = starting_value
+        current_value = 0
+
+        for mon in battle.team.values():
+            current_value += mon.current_hp_fraction * hp_value
+            if mon.fainted:
+                current_value -= fainted_value
+            elif mon.status is not None:
+                current_value -= status_value
+
+        current_value += (number_of_pokemons - len(battle.team)) * hp_value
+
+        for mon in battle.opponent_team.values():
+            current_value -= mon.current_hp_fraction * hp_value
+            if mon.fainted:
+                current_value += fainted_value
+            elif mon.status is not None:
+                current_value += status_value
+
+        current_value -= (number_of_pokemons - len(battle.opponent_team)) * hp_value
+
+        if battle.won:
+            current_value += victory_value
+        elif battle.lost:
+            current_value -= victory_value
+
+        to_return = current_value - self._reward_buffer[battle]
+        self._reward_buffer[battle] = current_value
+        return to_return
+
 
     def _create_account_configuration(self) -> AccountConfiguration:
         key = type(self).__name__
@@ -251,6 +306,220 @@ class Player(ABC):
             battle = await self._create_battle(battle_info)
         else:
             battle = await self._get_battle(split_messages[0][0])
+
+        if len(split_messages) > 3:
+            msg = split_messages[3:]
+            idx = 0
+            while idx < len(msg):
+                if len(msg[idx]) == 1:
+                    break
+
+                description = ""
+                if msg[idx][1] == "start":
+                    description = "Battle start:"
+                    battle.speed_list = []
+
+                elif msg[idx][1] == "turn":
+                    if len(battle.speed_list) == 2:
+                        description = f" {battle.speed_list[0]} outspeeded {battle.speed_list[1]}."
+                    description += "[sep]Turn " + msg[idx][2] + ":"
+                    battle.speed_list = []
+
+                elif msg[idx][1] == "switch":
+                    # update hp information
+                    self.switch_set.add(msg[idx][2])
+                    try:
+                        battle.pokemon_hp_log_dict[msg[idx][2]].append(msg[idx][4])
+                    except:
+                        battle.pokemon_hp_log_dict[msg[idx][2]] = [msg[idx][4]]
+
+                    description = " " + msg[idx][2].split(" ")[0] + " sent out " + msg[idx][2].split(": ")[-1] + "."
+                    description = description.replace("p2a:", "Player2").replace("p1a:", "Player1")
+
+                elif msg[idx][1] == "drag":
+                    try:
+                        battle.pokemon_hp_log_dict[msg[idx][2]].append(msg[idx][4])
+                    except:
+                        battle.pokemon_hp_log_dict[msg[idx][2]] = [msg[idx][4]]
+
+                    description = " " + msg[idx][2] + "was dragged out."
+
+                elif msg[idx][1] == "faint":
+                    description = " " + msg[idx][2] + " fainted."
+
+                elif msg[idx][1] == "move":
+                    description = " " + msg[idx][2] + " used "+ msg[idx][3] + "."
+                    battle.speed_list.append(msg[idx][2])
+
+                elif msg[idx][1] == "cant":
+                    if msg[idx][3] == "frz":
+                        reason = "frozen"
+                    elif msg[idx][3] == "par":
+                        reason = "paralyzed"
+                    elif msg[idx][3] == "slp":
+                        reason = "sleeping"
+                    else:
+                        reason = msg[idx][3]
+
+                    description = " " + msg[idx][2] + " cannot move because of " + reason + "."
+
+                elif msg[idx][1] == "-sidestart":
+                    if self.username in msg[idx][2]:
+                        target = "your team"
+                    else:
+                        target = "opponent's team"
+
+                    move_name = msg[idx][3]
+                    if move_name.startswith("move: "):
+                        move_name = move_name.replace("move: ", "")
+                    description = " " + move_name + " was set around " + target + "."
+
+                elif msg[idx][1] == "-sideend":
+                    if self.username in msg[idx][2]:
+                        target = "your"
+                    else:
+                        target = "opponent"
+                    description = " " + msg[idx][3] + "was removed from " + target + " team."
+
+                elif msg[idx][1] == "-start":
+                    description = " " + msg[idx][2] + " started " + msg[idx][3] + "."
+                    if len(msg[idx]) > 4:
+                        if msg[idx][4]:
+                            description = " " + msg[idx][2] + " started " + msg[idx][3] + " due to " + msg[idx][4] + "."
+
+                elif msg[idx][1] == "-end":
+                    description = " " + msg[idx][2] + " stopped " + msg[idx][3] + "."
+
+                # remove field and put it into the state
+                # elif msg[idx][1] == "-fieldstart":
+                #     description = " Field start: " + msg[idx][2] + " ran across the battlefield."
+                #
+                # elif msg[idx][1] == "-fieldend":
+                #     description = " Field end: " + msg[idx][2] + " disappeared from the battlefield."
+
+                elif msg[idx][1] == "-ability":
+                    description = " " + msg[idx][2] + "'s ability: " + msg[idx][3] + "."
+
+                elif msg[idx][1] == "-supereffective":
+                    description = " It was super effective to " + msg[idx][2] + "."
+
+                elif msg[idx][1] == "-resisted":
+                    description = " It was ineffective to " + msg[idx][2] + "."
+
+                elif msg[idx][1] == "-heal":
+                    try:
+                        previous_hp = battle.pokemon_hp_log_dict[msg[idx][2]][-1].split(" ")[0]
+                    except:
+                        previous_hp = "100/100"
+
+                    if previous_hp == "0":
+                        previous_hp_fraction = 0
+                    else:
+                        previous_hp_fraction = round(float(previous_hp.split("/")[0]) / float(previous_hp.split("/")[1]) * 100)
+
+                    current_hp = msg[idx][3].split(" ")[0]
+                    if current_hp == "0":
+                        current_hp_fraction = 0
+                    else:
+                        current_hp_fraction = round(float(current_hp.split("/")[0]) / float(current_hp.split("/")[1]) * 100)
+
+                    delta_hp_fraction = current_hp_fraction - previous_hp_fraction
+
+                    if len(msg[idx]) > 4:
+                        if "item" in msg[idx][4]:
+                            pass
+                        else:
+                            description = f" {msg[idx][2]} restored {delta_hp_fraction}% of HP ({current_hp_fraction}% left) {msg[idx][4]}."
+                    else:
+                        description = f" {msg[idx][2]} restored {delta_hp_fraction}% of HP ({current_hp_fraction}% left)."
+                    try:
+                        battle.pokemon_hp_log_dict[msg[idx][2]].append(msg[idx][3])
+                    except:
+                        battle.pokemon_hp_log_dict[msg[idx][2]] = [msg[idx][3]]
+
+                elif msg[idx][1] == "-damage":
+                    try:
+                        previous_hp = battle.pokemon_hp_log_dict[msg[idx][2]][-1].split(" ")[0]
+                    except:
+                        previous_hp = "100/100"
+
+                    if previous_hp == "0":
+                        previous_hp_fraction = 0
+                    else:
+                        previous_hp_fraction = round(float(previous_hp.split("/")[0]) / float(previous_hp.split("/")[1]) * 100)
+
+                    try:
+                        battle.pokemon_hp_log_dict[msg[idx][2]].append(msg[idx][3])
+                    except:
+                        battle.pokemon_hp_log_dict[msg[idx][2]] = [msg[idx][3]]
+
+                    current_hp = msg[idx][3].split(" ")[0]
+                    if current_hp == "0":
+                        current_hp_fraction = 0
+                    else:
+                        current_hp_fraction = round(float(current_hp.split("/")[0]) / float(current_hp.split("/")[1]) * 100)
+
+                    delta_hp_fraction = previous_hp_fraction - current_hp_fraction
+
+                    if current_hp_fraction == 100:
+                        idx += 1  # this is important !!
+                        continue  # no need to output
+
+                    if "oroark" in msg[idx][2]:  # Zoroark
+                        if len(msg[idx]) > 4:
+                            description = f" {msg[idx][2]}'s HP was damaged to {current_hp_fraction}% {msg[idx][4]}."
+                        else:
+                            description = f" It damaged {msg[idx][2]}'s HP to {current_hp_fraction}%."
+                    else:
+                        if len(msg[idx]) > 4:
+                            description = f" {msg[idx][2]}'s HP was damaged by {delta_hp_fraction}% {msg[idx][4]} ({current_hp_fraction}% left)."
+                        else:
+                            description = f" It damaged {msg[idx][2]}'s HP by {delta_hp_fraction}% ({current_hp_fraction}% left)."
+
+                elif msg[idx][1] == "-unboost":
+                    description = " It decreased " + msg[idx][2] + "'s " + msg[idx][3] + " " + msg[idx][4] + " level."
+
+                elif msg[idx][1] == "-boost":
+                    description = " It boosted " + msg[idx][2] + "'s " + msg[idx][3] + " " + msg[idx][4] + " level."
+
+                elif msg[idx][1] == "-fail":
+                    description = " But it failed."
+
+                elif msg[idx][1] == "-miss":
+                    description = " It missed."
+
+                elif msg[idx][1] == "-weather":
+                    # remove weather and put into the state
+                    pass
+                    # if len(msg[idx]) == 3:
+                    #     if msg[idx][2] == "None" or msg[idx][2] == "none":
+                    #         description = " Weather became normal."
+                    #     else:
+                    #         description = " Weather was " + msg[idx][2] + "."
+                    # else:
+                    #     if len(msg[idx]) == 4:
+                    #         description = " Weather was " + msg[idx][2] + " " + msg[idx][3] + "."
+                    #     else:
+                    #         description = " Weather was " + msg[idx][2] + " " + msg[idx][3] + " " + msg[idx][4] + "."
+
+                elif msg[idx][1] == "-activate":
+                    description = " " + msg[idx][2] + " activated " + msg[idx][3] + "."
+
+                elif msg[idx][1] == "-immune":
+                    description = f" but had zero effect to {msg[idx][2]}."
+
+                elif msg[idx][1] == "-crit":
+                    description = " A critical hit."
+
+                elif msg[idx][1] == "-status":
+                    status_dict = {"brn": "burnt", "frz": "frozen", "par": "paralyzed", "slp": "sleeping", "tox": "toxic", "psn": "poisoned"}
+                    description = " It caused " + msg[idx][2] + " " + status_dict[msg[idx][3]] + "."
+
+                if description:
+                    battle.battle_msg_history = battle.battle_msg_history + description
+                    # print(description)
+
+                idx += 1
 
         for split_message in split_messages[1:]:
             if len(split_message) <= 1:
@@ -422,6 +691,8 @@ class Player(ABC):
         if packed_team is None:
             packed_team = self.next_team
 
+        import logging
+        logging.warning("AAAHHH in accept_challenges")
         await handle_threaded_coroutines(
             self._accept_challenges(opponent, n_challenges, packed_team)
         )
@@ -432,6 +703,8 @@ class Player(ABC):
         n_challenges: int,
         packed_team: Optional[str],
     ):
+        import logging
+        logging.warning("AAAHHH in _accept_challenges")
         if opponent:
             if isinstance(opponent, list):
                 opponent = [to_id_str(o) for o in opponent]

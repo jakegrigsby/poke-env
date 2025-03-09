@@ -1,10 +1,10 @@
 from logging import Logger
 from typing import Any, Dict, List, Optional, Union
 
-from poke_env.environment.abstract_battle import AbstractBattle
-from poke_env.environment.move import Move
-from poke_env.environment.pokemon import Pokemon
-from poke_env.environment.pokemon_type import PokemonType
+from src.environment.abstract_battle import AbstractBattle
+from src.environment.move import Move
+from src.environment.pokemon import Pokemon
+from src.environment.pokemon_type import PokemonType
 
 
 class Battle(AbstractBattle):
@@ -32,6 +32,10 @@ class Battle(AbstractBattle):
         self._force_switch: bool = False
         self._maybe_trapped: bool = False
         self._trapped: bool = False
+
+        self.battle_msg_history = ""
+        self.pokemon_hp_log_dict = {}
+        self.speed_list = []
 
     def clear_all_boosts(self):
         if self.active_pokemon is not None:

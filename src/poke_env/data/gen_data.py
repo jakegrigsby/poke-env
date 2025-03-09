@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Union
 
 import orjson
 
-from poke_env.data.normalize import to_id_str
+from src.data.normalize import to_id_str
 
 
 class GenData:
@@ -64,14 +64,10 @@ class GenData:
         dex.update(other_forms_dex)
 
         for name, value in dex.items():
-            if self.gen < 3 and "abilities" in value:
-                # remove abilities from static files in gens 1-2
-                value["abilities"] = {"0" : "No Ability"}
             if "baseSpecies" in value:
                 value["species"] = value["baseSpecies"]
             else:
                 value["baseSpecies"] = to_id_str(name)
-
 
         return dex
 

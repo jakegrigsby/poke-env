@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, Union
-import logging
 
-from poke_env.data import GenData, to_id_str
-from poke_env.environment.effect import Effect
-from poke_env.environment.move import SPECIAL_MOVES, Move
-from poke_env.environment.pokemon_gender import PokemonGender
-from poke_env.environment.pokemon_type import PokemonType
-from poke_env.environment.status import Status
-from poke_env.environment.z_crystal import Z_CRYSTAL
+from src.data import GenData, to_id_str
+from src.environment.effect import Effect
+from src.environment.move import SPECIAL_MOVES, Move
+from src.environment.pokemon_gender import PokemonGender
+from src.environment.pokemon_type import PokemonType
+from src.environment.status import Status
+from src.environment.z_crystal import Z_CRYSTAL
+import math
 
 
 class Pokemon:
@@ -35,7 +35,6 @@ class Pokemon:
         "_possible_abilities",
         "_preparing_move",
         "_preparing_target",
-        "_previous_move",
         "_protect_counter",
         "_shiny",
         "_revealed",
@@ -77,7 +76,6 @@ class Pokemon:
         self._max_hp: Optional[int] = 0
         self._moves: Dict[str, Move] = {}
         self._shiny: Optional[bool] = False
-        self._previous_move : Optional[Move] = None
 
         # Battle related attributes
 
@@ -241,8 +239,6 @@ class Pokemon:
         self._preparing_move = None
         self._preparing_target = None
         move = self._add_move(move_id, use=use)
-        self._previous_move = move
-        self._first_turn = False
 
         if move and move.is_protect_counter and not failed:
             self._protect_counter += 1
@@ -277,10 +273,6 @@ class Pokemon:
 
         self._preparing_move = move
         self._preparing_target = target
-
-    @property
-    def previous_move(self) -> Optional[Move]:
-        return self._previous_move
 
     def primal(self):
         species_id_str = to_id_str(self._species)
@@ -505,15 +497,20 @@ class Pokemon:
                     [v for m, v in self.moves.items() if m.startswith("hiddenpower")][0]
                 )
             else:
-                if not {"copycat", "metronome", "mefirst", "mirrormove", "assist", "transform", "mimic"}.intersection(self.moves):
-                    # TODO: I can't find the solution for this bug, but also can't find a case where it justifies throwing an error.
-                    # seems to happen when a mirromove pokemon tries to copy a move from an opponent that has just switched out.
-                    logging.getLogger("poke-env").warning(f"Error with move {move} for species {self.species}. Expected self.moves to contain copycat, "
+                assert {
+                    "copycat",
+                    "metronome",
+                    "mefirst",
+                    "mirrormove",
+                    "assist",
+                    "transform",
+                    "mimic",
+                }.intersection(self.moves), (
+                    f"Error with move {move}. Expected self.moves to contain copycat, "
                     "metronome, mefirst, mirrormove, assist, transform or mimic. Got"
-                    f" {self.moves}. This pokemon could be accessing an unlearnable move."
+                    f" {self.moves}"
                 )
                 moves.append(Move(move, gen=self._data.gen))
-
         return moves
 
     def damage_multiplier(self, type_or_move: Union[PokemonType, Move]) -> float:
@@ -629,8 +626,8 @@ class Pokemon:
         :rtype: float
         """
         if self.current_hp:
-            return self.current_hp / float(self.max_hp)
-        return 0.
+            return self.current_hp / self.max_hp
+        return 0
 
     @property
     def effects(self) -> Dict[Effect, int]:
@@ -823,6 +820,56 @@ class Pokemon:
         :rtype: Optional[Status]
         """
         return self._status
+
+    def calculate_stats(self, ivs=(31,) * 6, evs=(85,) * 6):
+        def common_pkmn_stat_calc(stat: int, iv: int, ev: int, level: int):
+            return math.floor(((2 * stat + iv + math.floor(ev / 4)) * level) / 100)
+
+        new_stats = dict()
+        new_stats['hp'] = common_pkmn_stat_calc(
+                            self._base_stats['hp'],
+                            ivs[0],
+                            evs[0],
+                            self._level
+                        ) + self._level + 10
+
+        new_stats['atk'] = common_pkmn_stat_calc(
+                            self._base_stats['atk'],
+                            ivs[1],
+                            evs[1],
+                            self._level
+                        ) + 5
+
+        new_stats['def'] = common_pkmn_stat_calc(
+                            self._base_stats['def'],
+                            ivs[2],
+                            evs[2],
+                            self._level
+                        ) + 5
+
+        new_stats['spa'] = common_pkmn_stat_calc(
+                            self._base_stats['spa'],
+                            ivs[3],
+                            evs[3],
+                            self._level
+                        ) + 5
+
+        new_stats['spd'] = common_pkmn_stat_calc(
+                            self._base_stats['spd'],
+                            ivs[4],
+                            evs[4],
+                            self._level
+                        ) + 5
+
+        new_stats['spe'] = common_pkmn_stat_calc(
+                            self._base_stats['spe'],
+                            ivs[5],
+                            evs[5],
+                            self._level
+                        ) + 5
+
+        new_stats = {k: int(v) for k, v in new_stats.items()}
+        return new_stats
 
     @property
     def status_counter(self) -> int:

@@ -1862,12 +1862,11 @@
             "hp": 80,
             "spa": 88,
             "spd": 99,
-            "spe": 124
+            "spe": 125
         },
         "color": "Blue",
         "eggGroups": [
-            "Amorphous",
-            "Water 3"
+            "Undiscovered"
         ],
         "gen": 9,
         "heightm": 10,

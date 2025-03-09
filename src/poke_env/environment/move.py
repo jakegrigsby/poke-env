@@ -2,12 +2,12 @@ import copy
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from poke_env.data import GenData, to_id_str
-from poke_env.environment.field import Field
-from poke_env.environment.move_category import MoveCategory
-from poke_env.environment.pokemon_type import PokemonType
-from poke_env.environment.status import Status
-from poke_env.environment.weather import Weather
+from src.data import GenData, to_id_str
+from src.environment.field import Field
+from src.environment.move_category import MoveCategory
+from src.environment.pokemon_type import PokemonType
+from src.environment.status import Status
+from src.environment.weather import Weather
 
 SPECIAL_MOVES: Set[str] = {"struggle", "recharge"}
 
@@ -110,12 +110,9 @@ class Move:
 
     @staticmethod
     def is_id_z(id_: str, gen: int) -> bool:
-        move_data = GenData.from_gen(gen).moves
-        if id_.startswith("z") and id_[1:] in move_data:
+        if id_.startswith("z") and id_[1:] in GenData.from_gen(gen).moves:
             return True
-        elif id_ in move_data:
-            return "isZ" in move_data[id_]
-        return False
+        return "isZ" in GenData.from_gen(gen).moves[id_]
 
     @staticmethod
     def is_max_move(id_: str, gen: int) -> bool:
@@ -299,7 +296,7 @@ class Move:
         elif self._id.startswith("z") and self._id[1:] in self._moves_dict:
             return self._moves_dict[self._id[1:]]
         elif self._id == "recharge":
-            return {"pp": 1, "type": "normal", "category": "Special", "priority" : 0, "target" : "self", "accuracy": 1}
+            return {"pp": 1, "type": "normal", "category": "Special", "accuracy": 1}
         else:
             raise ValueError("Unknown move: %s" % self._id)
 
@@ -771,6 +768,7 @@ class Move:
         elif base_power <= 130:
             return 195
         return 200
+
 
 class EmptyMove(Move):
     def __init__(self, move_id: str):

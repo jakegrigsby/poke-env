@@ -12,17 +12,17 @@ import requests
 import websockets.client as ws
 from websockets.exceptions import ConnectionClosedOK
 
-from poke_env.concurrency import (
+from src.concurrency import (
     POKE_LOOP,
     create_in_poke_loop,
     handle_threaded_coroutines,
 )
-from poke_env.exceptions import ShowdownException
-from poke_env.ps_client.account_configuration import AccountConfiguration
-from poke_env.ps_client.server_configuration import ServerConfiguration
+from src.exceptions import ShowdownException
+from src.client.account_configuration import AccountConfiguration
+from src.client.server_configuration import ServerConfiguration
 
 
-class PSClient:
+class Client:
     """
     Pokemon Showdown client.
 
@@ -135,6 +135,8 @@ class PSClient:
             # Otherwise it is the one-th entry
             if split_messages[0][0].startswith(">battle"):
                 # Battle update
+                # if self.username == 'SimpleHeuristics 1':
+                    # print("pause")
                 await self._handle_battle_message(split_messages)  # type: ignore
             elif split_messages[0][1] == "challstr":
                 # Confirms connection to the server: we can login
@@ -355,4 +357,4 @@ class PSClient:
         :return: The websocket url.
         :rtype: str
         """
-        return self.server_configuration.websocket_url
+        return f"ws://{self.server_configuration.server_url}/showdown/websocket"

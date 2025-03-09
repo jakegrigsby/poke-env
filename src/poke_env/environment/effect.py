@@ -22,7 +22,6 @@ class Effect(Enum):
     BAD_DREAMS = auto()
     BANEFUL_BUNKER = auto()
     BATTLE_BOND = auto()
-    BEAT_UP = auto()
     BIDE = auto()
     BIND = auto()
     BURN_UP = auto()
@@ -60,7 +59,6 @@ class Effect(Enum):
     FLOWER_VEIL = auto()
     FOCUS_BAND = auto()
     FOCUS_ENERGY = auto()
-    FOCUS_PUNCH = auto()
     FORESIGHT = auto()
     FOREWARN = auto()
     FUTURE_SIGHT = auto()
@@ -69,13 +67,11 @@ class Effect(Enum):
     G_MAX_ONE_BLOW = auto()
     G_MAX_RAPID_FLOW = auto()
     G_MAX_SANDBLAST = auto()
-    GOOEY = auto()
     GRAVITY = auto()
     GRUDGE = auto()
     GUARD_SPLIT = auto()
     GULP_MISSILE = auto()
     HADRON_ENGINE = auto()
-    HAZE = auto()
     HEAL_BELL = auto()
     HEAL_BLOCK = auto()
     HEALER = auto()
@@ -95,7 +91,6 @@ class Effect(Enum):
     LEECH_SEED = auto()
     LEPPA_BERRY = auto()
     LIGHTNING_ROD = auto()
-    LIGHT_SCREEN = auto()
     LIMBER = auto()
     LIQUID_OOZE = auto()
     LOCK_ON = auto()
@@ -111,9 +106,7 @@ class Effect(Enum):
     MIRACLE_EYE = auto()
     MIST = auto()
     MISTY_TERRAIN = auto()
-    MUD_SPORT = auto()
     MUMMY = auto()
-    MYSTERY_BERRY = auto()
     NEUTRALIZING_GAS = auto()
     NIGHTMARE = auto()
     NO_RETREAT = auto()
@@ -150,12 +143,9 @@ class Effect(Enum):
     QUARKDRIVESPE = auto()
     QUASH = auto()
     QUICK_CLAW = auto()
-    QUICK_DRAW = auto()
     QUICK_GUARD = auto()
-    RAMPAGE = auto()
     REFLECT = auto()
     RIPEN = auto()
-    ROOST = auto()
     ROUGH_SKIN = auto()
     SAFEGUARD = auto()
     SAFETY_GOGGLES = auto()
@@ -235,8 +225,6 @@ class Effect(Enum):
 
         if message == "FALLENUNDEFINED":
             message = "FALLEN"
-        if message == "LIGHTSCREEN":
-            message = "LIGHT_SCREEN"
 
         try:
             return Effect[message]
