@@ -60,6 +60,7 @@ class Player(ABC):
         server_configuration: Optional[ServerConfiguration] = None,
         start_timer_on_battle_start: bool = False,
         start_listening: bool = True,
+        open_timeout: Optional[float] = 10.0,
         ping_interval: Optional[float] = 20.0,
         ping_timeout: Optional[float] = 20.0,
         team: Optional[Union[str, Teambuilder]] = None,
@@ -117,6 +118,7 @@ class Player(ABC):
             log_level=log_level,
             server_configuration=server_configuration,
             start_listening=start_listening,
+            open_timeout=open_timeout,
             ping_interval=ping_interval,
             ping_timeout=ping_timeout,
         )
