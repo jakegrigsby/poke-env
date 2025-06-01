@@ -39,6 +39,7 @@ class PSClient:
         log_level: Optional[int] = None,
         server_configuration: ServerConfiguration,
         start_listening: bool = True,
+        open_timeout: Optional[float] = 10.0,
         ping_interval: Optional[float] = 20.0,
         ping_timeout: Optional[float] = 20.0,
     ):
@@ -64,6 +65,7 @@ class PSClient:
         :type ping_timeout: float, optional
         """
         self._active_tasks: Set[Any] = set()
+        self._open_timeout = open_timeout
         self._ping_interval = ping_interval
         self._ping_timeout = ping_timeout
 
@@ -212,6 +214,7 @@ class PSClient:
             async with ws.connect(
                 self.websocket_url,
                 max_queue=None,
+                open_timeout=self._open_timeout,
                 ping_interval=self._ping_interval,
                 ping_timeout=self._ping_timeout,
             ) as websocket:
